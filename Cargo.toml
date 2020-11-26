@@ -1,0 +1,16 @@
+[package]
+name = "buzz-waybar"
+version = "0.1.0"
+authors = ["Edwin Svensson <buzz-waybar@olback.net>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { version = "1.0", features = [ "derive" ] }
+serde_json = "1.0"
+dirs = "3.0"
+toml = "0.5"
+imap = "2.3"
+native-tls = "0.2"
+

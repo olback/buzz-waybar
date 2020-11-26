@@ -1,0 +1,14 @@
+[defaults]
+notification-cmd = "notify-send New mail!"
+folder = "INBOX"
+trim-password = true
+
+['Test Mail']
+address = "mail.example.com"
+port = 993
+username = "mike.example.com"
+password-cmd = "gnome-keyring-query get mail_mike_example_com" # Can be set with echo -n 'secure-password' | gnome-keyring-query set mail_mike_example_com
+#folder = "INBOX" # Defaults to "INBOX"
+#trim-password = true
+#notification-cmd = ""
+
