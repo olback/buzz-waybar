@@ -1,14 +1,21 @@
+# Copy this file to ~/.config/waybar/Buzz.toml
+
+# You can use {name} and {username} in notification-cmd.
+# {name} will be replaced with the value in the square brackets ([])
+# {username} will be replaced by the username specified.
+
+# These values will be the default for all accounts. They're overwritten if specified in an account.
 [defaults]
-notification-cmd = "notify-send New mail!"
+notification-cmd = "notify-send -i mail 'New mail' '{name}'"
 folder = "INBOX"
 trim-password = true
 
-['Test Mail']
-address = "mail.example.com"
-port = 993
-username = "mike.example.com"
+['Test Mail'] # This can be whatever you want. This value will replace {name}
+address = "mail.example.com" # Mail server address.
+port = 993 # Mail server port, usually 993
+username = "mike@example.com" # This is usually your email. This value will replace {username}
 password-cmd = "gnome-keyring-query get mail_mike_example_com" # Can be set with echo -n 'secure-password' | gnome-keyring-query set mail_mike_example_com
-#folder = "INBOX" # Defaults to "INBOX"
-#trim-password = true
-#notification-cmd = ""
+#folder = "INBOX" # Defaults to "INBOX" # Folder to fetch unread emails from
+#trim-password = true # Trim password output from password-cmd
+#notification-cmd = "" # Specify account specific notification command
 
