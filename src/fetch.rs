@@ -1,6 +1,5 @@
 use {
     super::config::Server,
-    imap::Client,
     native_tls,
     std::{
         collections::HashMap,
@@ -59,6 +58,7 @@ pub fn runner(servers: HashMap<String, Server>, return_data: Arc<Mutex<HashMap<S
             }
         };
 
+        println!("Connected to {} ({}:{})", key, server.address, server.port);
         connections.insert(key, (server.clone(), Some(imap_session)));
     }
 
@@ -72,21 +72,29 @@ pub fn runner(servers: HashMap<String, Server>, return_data: Arc<Mutex<HashMap<S
                 let mut lock = return_data.lock().expect("Toxic lock");
                 if let Some(last_unseen) = lock.get(name) {
                     if num_unseen > *last_unseen && server.notification_cmd.is_some() {
-                        Command::new("sh").arg("-c").arg(
-                            server
-                                .notification_cmd
-                                .clone()
-                                .unwrap()
-                                .replace("{name}", name)
-                                .replace("{username}", &server.username)
-                                .replace("{subject}", "TODO")
-                                .replace("{from}", "TODO"),
-                        );
+                        let _ = Command::new("sh")
+                            .arg("-c")
+                            .arg(
+                                server
+                                    .notification_cmd
+                                    .clone()
+                                    .unwrap()
+                                    .replace("{name}", name)
+                                    .replace("{username}", &server.username)
+                                    // .replace("{subject}", "TODO")
+                                    // .replace("{from}", "TODO"),
+                            )
+                            .spawn();
                     }
                 }
                 lock.insert(name.clone(), num_unseen);
             }
         }
-        thread::sleep(Duration::from_secs(60));
+        if let Some(time) = std::env::var("BUZZ_SLEEP")
+            .ok()
+            .and_then(|time| time.parse::<u64>().ok())
+        {
+            thread::sleep(Duration::from_secs(time));
+        }
     }
 }
