@@ -38,11 +38,16 @@ pub fn runner(servers: HashMap<String, Server>, return_data: Arc<Mutex<HashMap<S
             .output()
         {
             Ok(output) => {
-                let pass = String::from_utf8_lossy(&output.stdout);
-                if server.trim_password {
-                    pass.trim().to_string()
+                // println!("{}", output.status);
+                if output.status.success() {
+                    let pass = String::from_utf8_lossy(&output.stdout);
+                    if server.trim_password {
+                        pass.trim().to_string()
+                    } else {
+                        pass.to_string()
+                    }
                 } else {
-                    pass.to_string()
+                    continue;
                 }
             }
             Err(e) => {
