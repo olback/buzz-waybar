@@ -11,11 +11,22 @@ use {
     },
 };
 
+// TODO:
+// enum ShouldRetry {
+//     Yes(String),
+//     No(String)
+// }
+
+// let mut connections = HashMap::<String, (Server, Result<ImapSession, Result<usize, ShouldRetry>>)>::with_capacity(servers.len());
+
 type ImapSession = imap::Session<native_tls::TlsStream<TcpStream>>;
 
-pub fn runner(servers: HashMap<String, Server>, return_data: Arc<Mutex<HashMap<String, usize>>>) {
+pub fn runner(
+    servers: HashMap<String, Server>,
+    return_data: Arc<Mutex<HashMap<String, Result<usize, String>>>>,
+) {
     let mut connections =
-        HashMap::<String, (Server, Option<ImapSession>)>::with_capacity(servers.len());
+        HashMap::<String, (Server, Result<ImapSession, String>)>::with_capacity(servers.len());
     for (key, server) in servers {
         let tls = native_tls::TlsConnector::builder()
             .build()
@@ -28,6 +39,7 @@ pub fn runner(servers: HashMap<String, Server>, return_data: Arc<Mutex<HashMap<S
             Ok(c) => c,
             Err(e) => {
                 eprintln!("{}", e);
+                connections.insert(key, (server.clone(), Err(format!("{}", e))));
                 continue;
             }
         };
@@ -47,59 +59,79 @@ pub fn runner(servers: HashMap<String, Server>, return_data: Arc<Mutex<HashMap<S
                         pass.to_string()
                     }
                 } else {
+                    connections.insert(
+                        key,
+                        (
+                            server.clone(),
+                            Err(format!(
+                                "Password command failed with status: {}",
+                                output.status
+                            )),
+                        ),
+                    );
                     continue;
                 }
             }
             Err(e) => {
                 eprintln!("{}", e);
-                continue;
-            }
-        };
-        let imap_session = match client.login(server.username.clone(), password) {
-            Ok(is) => is,
-            Err(e) => {
-                eprintln!("{:?}", e);
+                connections.insert(key, (server.clone(), Err(format!("{:?}", e))));
                 continue;
             }
         };
 
-        println!("Connected to {} ({}:{})", key, server.address, server.port);
-        connections.insert(key, (server.clone(), Some(imap_session)));
+        match client.login(server.username.clone(), password) {
+            Ok(imap_session) => {
+                println!("Connected to {} ({}:{})", key, server.address, server.port);
+                connections.insert(key, (server.clone(), Ok(imap_session)));
+            }
+            Err(e) => {
+                eprintln!(
+                    "Failed to connect to {} ({}:{}): {:#?}",
+                    key, server.address, server.port, e
+                );
+                connections.insert(key, (server.clone(), Err(format!("{:?}", e))));
+            }
+        }
     }
 
     loop {
-        // println!("{:#?}", connections);
+        println!("{:#?}", connections);
         for (name, (server, con)) in &mut connections {
-            if let Some(c) = con {
-                let _ = c.select(&server.folder);
-                let uids = c.uid_search("UNSEEN 1:*").unwrap();
-                let num_unseen = uids.len();
-                let mut lock = return_data.lock().expect("Toxic lock");
-                if let Some(last_unseen) = lock.get(name) {
-                    if num_unseen > *last_unseen && server.notification_cmd.is_some() {
-                        let _ = Command::new("sh")
-                            .arg("-c")
-                            .arg(
-                                server
-                                    .notification_cmd
-                                    .clone()
-                                    .unwrap()
-                                    .replace("{name}", name)
-                                    .replace("{username}", &server.username)
-                                    // .replace("{subject}", "TODO")
-                                    // .replace("{from}", "TODO"),
-                            )
-                            .spawn();
+            match con {
+                Ok(c) => {
+                    let _ = c.select(&server.folder); // TODO: Handle this error! c.select().and_then()?
+                    let uids = c.uid_search("UNSEEN 1:*").unwrap(); // TODO: Handle this error!
+                    let num_unseen = uids.len();
+                    let mut lock = return_data.lock().expect("Toxic lock");
+                    if let Some(last_unseen) = lock.get(name) {
+                        if Ok(num_unseen) > *last_unseen && server.notification_cmd.is_some() {
+                            let _ = Command::new("sh")
+                                .arg("-c")
+                                .arg(
+                                    server
+                                        .notification_cmd
+                                        .clone()
+                                        .unwrap()
+                                        .replace("{name}", name)
+                                        .replace("{username}", &server.username)
+                                        // .replace("{subject}", "TODO")
+                                        // .replace("{from}", "TODO"),
+                                )
+                                .spawn();
+                        }
                     }
+                    lock.insert(name.clone(), Ok(num_unseen));
                 }
-                lock.insert(name.clone(), num_unseen);
+                Err(e) => {
+                    // TODO: Retry connection
+                    let mut lock = return_data.lock().expect("Toxic lock");
+                    lock.insert(name.clone(), Err(format!("{:?}", e)));
+                }
             }
         }
-        if let Some(time) = std::env::var("BUZZ_SLEEP")
-            .ok()
-            .and_then(|time| time.parse::<u64>().ok())
-        {
-            thread::sleep(Duration::from_secs(time));
-        }
+        let time = std::env::var("BUZZ_SLEEP")
+            .map(|s| s.parse::<u64>().unwrap_or(60))
+            .unwrap_or(60);
+        thread::sleep(Duration::from_secs(time));
     }
 }

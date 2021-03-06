@@ -19,7 +19,7 @@ mod return_data;
 
 fn main() -> Result<(), io::Error> {
     let servers = config::load_servers()?;
-    let ret_data = Arc::new(Mutex::new(HashMap::<String, usize>::new()));
+    let ret_data = Arc::new(Mutex::new(HashMap::<String, Result<usize, String>>::new()));
     let socket_path = env::var("SWAYSOCK")
         .map(|path| {
             let mut new_path = PathBuf::from(path);
