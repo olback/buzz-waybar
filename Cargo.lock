@@ -64,7 +64,7 @@ checksum = "40e38929add23cdf8a366df9b0e088953150724bcbe5fc330b0d8eb3b328eec8"
 
 [[package]]
 name = "buzz-waybar"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "dirs",
  "imap",

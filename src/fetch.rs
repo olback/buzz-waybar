@@ -11,11 +11,20 @@ use {
     },
 };
 
-// TODO:
-// enum ShouldRetry {
-//     Yes(String),
-//     No(String)
-// }
+#[derive(Debug)]
+enum ShouldRetry {
+    Yes(String),
+    No(String),
+}
+
+impl ShouldRetry {
+    pub fn message(&self) -> String {
+        String::from(match self {
+            Self::Yes(ref m) => m,
+            Self::No(ref m) => m,
+        })
+    }
+}
 
 // let mut connections = HashMap::<String, (Server, Result<ImapSession, Result<usize, ShouldRetry>>)>::with_capacity(servers.len());
 
@@ -25,8 +34,10 @@ pub fn runner(
     servers: HashMap<String, Server>,
     return_data: Arc<Mutex<HashMap<String, Result<usize, String>>>>,
 ) {
+    // let mut connections = HashMap::<String, (Server, Result<ImapSession, String>)>::with_capacity(servers.len());
     let mut connections =
-        HashMap::<String, (Server, Result<ImapSession, String>)>::with_capacity(servers.len());
+        HashMap::<String, (Server, Result<ImapSession, ShouldRetry>)>::with_capacity(servers.len());
+
     for (key, server) in servers {
         let tls = native_tls::TlsConnector::builder()
             .build()
@@ -39,7 +50,10 @@ pub fn runner(
             Ok(c) => c,
             Err(e) => {
                 eprintln!("{}", e);
-                connections.insert(key, (server.clone(), Err(format!("{}", e))));
+                connections.insert(
+                    key,
+                    (server.clone(), Err(ShouldRetry::No(format!("{}", e)))),
+                );
                 continue;
             }
         };
@@ -63,10 +77,10 @@ pub fn runner(
                         key,
                         (
                             server.clone(),
-                            Err(format!(
+                            Err(ShouldRetry::Yes(format!(
                                 "Password command failed with status: {}",
                                 output.status
-                            )),
+                            ))),
                         ),
                     );
                     continue;
@@ -74,7 +88,10 @@ pub fn runner(
             }
             Err(e) => {
                 eprintln!("{}", e);
-                connections.insert(key, (server.clone(), Err(format!("{:?}", e))));
+                connections.insert(
+                    key,
+                    (server.clone(), Err(ShouldRetry::Yes(format!("{:?}", e)))),
+                );
                 continue;
             }
         };
@@ -84,12 +101,22 @@ pub fn runner(
                 println!("Connected to {} ({}:{})", key, server.address, server.port);
                 connections.insert(key, (server.clone(), Ok(imap_session)));
             }
-            Err(e) => {
+            Err((e, _)) => {
                 eprintln!(
                     "Failed to connect to {} ({}:{}): {:#?}",
                     key, server.address, server.port, e
                 );
-                connections.insert(key, (server.clone(), Err(format!("{:?}", e))));
+                match e {
+                    imap::Error::No(msg) => {
+                        connections.insert(key, (server.clone(), Err(ShouldRetry::No(msg))));
+                    }
+                    _ => {
+                        connections.insert(
+                            key,
+                            (server.clone(), Err(ShouldRetry::Yes(format!("{:?}", e)))),
+                        );
+                    }
+                };
             }
         }
     }
@@ -125,7 +152,7 @@ pub fn runner(
                 Err(e) => {
                     // TODO: Retry connection
                     let mut lock = return_data.lock().expect("Toxic lock");
-                    lock.insert(name.clone(), Err(format!("{:?}", e)));
+                    lock.insert(name.clone(), Err(e.message()));
                 }
             }
         }
